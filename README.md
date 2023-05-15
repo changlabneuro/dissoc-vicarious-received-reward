@@ -1,5 +1,7 @@
 This repository contains the code accompanying our manuscript: Dissociation of vicarious and experienced rewards by coupling frequency within the same neural pathway.
 
+[![DOI](https://zenodo.org/badge/641056578.svg)](https://zenodo.org/badge/latestdoi/641056578)
+
 The main scripts include the following: 
 * `ptp_plot_original_figures.m`: Generates spike-field coherence spectra, time courses for frequency windows of interest, and time-frequency window summaries.
 * `ptp_plot_raw_granger.m`: Plots time courses of spectral Granger causality for frequency windows of interest.
