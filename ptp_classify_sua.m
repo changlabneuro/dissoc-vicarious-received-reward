@@ -323,7 +323,7 @@ hold on;
 scatter( score(idx == 1, 1), score(idx == 1, 2), 'r*' );
 scatter( score(idx == 2, 1), score(idx == 2, 2), 'b*' );
 
-if ( 1 )
+if ( 0 )
   save( fullfile(data_root, 'cell-clusters/cell-clusters-reward-mag-121422.mat'), 'idx', 'spike_cluster_info', 'cell_cluster_labels', 'metrics', 'score' );
 end
 

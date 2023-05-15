@@ -16,6 +16,11 @@ else
     p_Mat = rescale(f_Mat,min(min(orig_Mat)),max(max(orig_Mat)));
 end
 
+avoid_zscore = true;  % 03/09/22
+if ( avoid_zscore )
+  p_Mat = imgaussfilt( orig_Mat, 2 );
+end
+
 
 imagesc('XData',timeLabels,'YData',freqLabels,'CData',p_Mat)
 set(gca,'YDir','normal')

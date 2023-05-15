@@ -16,15 +16,80 @@ timeLabels = t - 25.5;
 
 %%
 
-figure(1);
-
-freq_win = [35, 51];
 % freq_win = [10, 20];
+freq_win = [35, 51];
+
+f_ind = f >= freq_win(1) & f < freq_win(2);
+t_sub = timeLabels >= 50 & timeLabels <= 350;
+f_mean = squeeze( nanmean(coh(:, f_ind, t_sub), [2, 3]) );
+
+n = 1e2;
+is_sig = false( n, 1 );
+
+self_gt = true;
+allow_replace = true;
+up_sample = false;
+
+for i = 1:n
+  sampled = find_cell_cluster_subsets_matching_n( ...
+    coh_labels, rowmask(coh_labels), allow_replace, up_sample );
+%   sampled = rowmask( coh_labels );
+  mask = pipe( sampled ...
+    , @(m) find(coh_labels, 'acc_bla', m) ...
+    , @(m) find(coh_labels, {'choice'}, m) ... 
+    , @(m) find(coh_labels, {'cell-cluster2'}, m) ...
+  );
+  sampled(~ismember(sampled, mask)) = [];
+
+  if ( self_gt )
+    [al, bl] = deal( 'self-bottle', 'other-bottle' );
+  else
+    [al, bl] = deal( 'other-bottle', 'self-bottle' );
+  end
+  
+  ai = find( coh_labels, al );
+  bi = find( coh_labels, bl );
+  ai(~ismember(ai, mask)) = [];
+  bi(~ismember(bi, mask)) = [];
+  
+  real_mu_a = nanmean( f_mean(ai) );
+  real_mu_b = nanmean( f_mean(bi) );
+  
+  num_ai = numel( ai );
+  inds = [ ai; bi ];
+  inds = inds(randperm(numel(inds)));
+  null_ai = inds(1:num_ai);
+  null_bi = inds(num_ai+1:end);
+  
+  null_mu_a = nanmean( f_mean(null_ai) );
+  null_mu_b = nanmean( f_mean(null_bi) );
+  
+%   is_sig(i) = real_mu_a > real_mu_b;
+%   is_sig(i) = real_mu_a > real_mu_b & ...
+%     (null_mu_a < null_mu_b | (real_mu_a - real_mu_b > null_mu_a - null_mu_b));
+  [~, p] = ttest2( f_mean(ai), f_mean(bi) );
+  is_sig(i) = p < 0.05;
+end
+
+p_is_sig = 1 - sum( is_sig ) / numel( is_sig );
+
+%%
+
+figure(3);
+
+% freq_win = [35, 51];
+freq_win = [10, 20];
 f_ind = f >= freq_win(1) & f < freq_win(2);
 f_mean = squeeze( nanmean(coh(:, f_ind, :), 2) );
 
+if ( 0 )
+  base_mask = sampled;
+else
+  base_mask = rowmask( f_mean );
+end
+
 plt_labels = coh_labels';
-plt_mask = pipe( rowmask(f_mean) ...
+plt_mask = pipe( base_mask ...
   , @(m) find(plt_labels, 'acc_bla', m) ...
   , @(m) find(plt_labels, {'choice'}, m) ... 
   , @(m) find(plt_labels, {'cell-cluster1', 'cell-cluster2'}, m) ...
@@ -106,6 +171,61 @@ for i = 1:numel(PI)
     set( axs(i), 'ylim', [-30e-3, 30e-3] );
   end
 end
+
+%%
+
+t_sub = [ timeLabels >= 50 & timeLabels <= 350 ];
+t_mean = squeeze( nanmean(coh(:, :, t_sub), 3) );
+base_mask = rowmask( t_mean );
+
+assert_ispair( t_mean, coh_labels );
+
+plt_labels = coh_labels';
+plt_mask = pipe( base_mask ...
+  , @(m) find(plt_labels, 'acc_bla', m) ...
+  , @(m) find(plt_labels, {'choice'}, m) ... 
+  , @(m) find(plt_labels, {'cell-cluster1', 'cell-cluster2'}, m) ...
+);
+
+t_mean = t_mean(plt_mask, :);
+plt_labels = plt_labels(plt_mask);
+
+if ( 0 )
+  sub_each = {'days', 'direction', 'lfp-channel', 'spk-channel', 'trialtype', 'cell-cluster'};
+  [t_mean, plt_labels] = dsp3.summary_binary_op(...
+    t_mean, plt_labels', sub_each, 'self-bottle', 'other-bottle', @minus, @nanmean );  
+end
+
+freq_win = [2, 60];
+f_ind = find( f >= freq_win(1) & f <= freq_win(2) );
+
+figure(1); clf;
+pl = plotlabeled.make_common();
+
+% pl.x = f(f_ind);
+% axs = pl.lines( t_mean(:, f_ind), plt_labels, 'cell-cluster', {'trialtype', 'direction', 'outcome'} );
+
+[I, id, C] = rowsets( 2, plt_labels, {'direction', 'cell-cluster'}, {'outcome'} );
+[PI, PL] = plots.nest2( id, I, plots.cellstr_join(C) );
+axs = plots.simple2( PI, PL, @(ax, inds, j, label) stdshade_cb(t_mean(:, f_ind), f(f_ind), inds, j, label) );
+for i = 1:numel(PI)
+  p0 = arrayfun( @(x) select(2, @() ttest2(t_mean(PI{i}{1}, x), t_mean(PI{i}{2}, x))), f_ind );
+  sig = p0 < 0.05;
+  scatter( axs(i), f(f_ind(sig)), max(get(axs(i), 'ylim')), 'k*' );
+end
+xlabel( axs, 'Hz' );
+% shared_utils.plot.add_horizontal_lines( axs, 0 );
+shared_utils.plot.set_ylims( axs, [-0.08, 0.08] );
+
+
+%%
+
+[I, id, C] = rowsets( 2, plt_labels, {'direction', 'cell-cluster'}, {'outcome'}, 'mask', plt_mask );
+[PI, PL] = plots.nest2( id, I, plots.cellstr_join(C) );
+axs = plots.simple2( PI, PL, @(ax, inds, j, label) stdshade_cb(f_mean, timeLabels, inds, j, label) );
+shared_utils.plot.add_horizontal_lines( axs, 0 );
+shared_utils.plot.set_xlims( axs, [-150, 600] );
+
 
 %%
 
@@ -193,5 +313,27 @@ end
 % keep_ind = find( coh_labels, {'acc_bla', 'spk-acc'} );
 % coh_labels = coh_labels(keep_ind);
 % coh = coh(keep_ind, :, :);
+
+end
+
+function sampled = find_cell_cluster_subsets_matching_n(coh_labels, base_mask, replace, up_sample)
+
+unit_spec = {'spk-region', 'spk-channel', 'unit_index', 'days'};
+cluster_I = findall( coh_labels, 'cell-cluster', findnone(coh_labels, '<cell-cluster>', base_mask) );
+units_by_cluster = eachcell( @(x) combs(coh_labels, unit_spec, x), cluster_I );
+ns = cellfun( @(x) size(x, 2), units_by_cluster );
+min_n = min( ns );
+max_n = max( ns );
+
+if ( up_sample )
+  assert( replace, 'Must allow replacement when upsampling' );
+  sample_n = max_n;
+else
+  sample_n = min_n;
+end
+
+sampled = eachcell( @(x) x(:, randsample(size(x, 2), sample_n, replace)), units_by_cluster );
+sampled = sort( cate1( eachcell(...
+  @(x, m) cate1(bfw.find_combinations(coh_labels, x, m)), sampled, cluster_I)) );
 
 end

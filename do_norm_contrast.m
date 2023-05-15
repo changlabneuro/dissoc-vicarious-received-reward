@@ -1,4 +1,8 @@
-function [tot_coh, tot_coh_labels] = do_norm_contrast(coh, coh_labels, I, across)
+function [tot_coh, tot_coh_labels] = do_norm_contrast(coh, coh_labels, I, across, really_contrast)
+
+if ( nargin < 5 )
+  really_contrast = true;
+end
 
 assert_ispair( coh, coh_labels );
 
@@ -47,7 +51,7 @@ for i = 1:numel(I)
       o_ind = find( coh_labels, 'other', ri );
       n_ind = find( coh_labels, 'none', ri );
       
-      if ( 0 )  % no contrast, just subtract mean
+      if ( ~really_contrast )  % no contrast, just subtract mean
         coh_s = (nanmean(coh(s_ind, :, :), 1) - coh_sn);
         coh_o = (nanmean(coh(o_ind, :, :), 1) - coh_on);
         coh_n = (nanmean(coh(n_ind, :, :), 1) - coh_on);

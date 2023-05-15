@@ -36,6 +36,7 @@ t2_choice_o = repmat( [dir2, ol, choice], size(t2_choice_normOther_popCoh, 1), 1
 coh = [ 
   t1_cued_normSelf_popCoh;
   t1_cued_normOther_popCoh;
+  
   t1_choice_normSelf_popCoh;
   t1_choice_normOther_popCoh;
 

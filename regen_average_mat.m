@@ -47,7 +47,7 @@ if ~strcmp(loadStruct.spkReg, loadStruct.lfpRegs)
     copy_fields = { 'lfpChans', 'lfpDay', 'lfpRegs', 'spikeIdx', 'spkChan', 'spkReg' };
     field_subset = cellfun( @(x) loadStruct.(x), copy_fields, 'un', 0 );
     site_info(end+1, :) = field_subset;
-    if ( 1 ), continue; end
+%     if ( 1 ), continue; end
     
     %%
 
@@ -56,8 +56,8 @@ if ~strcmp(loadStruct.spkReg, loadStruct.lfpRegs)
     outcomes = loadStruct.ccLFPInfo(:,4);
     trialtypes = loadStruct.ccLFPInfo(:,5);
     
-    trial_ind = find( trial_labels, loadStruct.lfpDay );
-    assert( numel(trial_ind) == size(loadStruct.cohMatrix, 3) );
+%     trial_ind = find( trial_labels, loadStruct.lfpDay );
+%     assert( numel(trial_ind) == size(loadStruct.cohMatrix, 3) );
     
     
     preIdxs = find(strcmp(administration, 'pre'));
@@ -203,18 +203,20 @@ load_mats = shared_utils.io.findmat( '/Volumes/external3/data/changlab/ptp-vicar
 
 %%  social gaze coh
 
-coh_p = '/Volumes/external3/data/changlab/ptp-vicarious-reward/iti_gaze_aligned_coh';
+coh_p = fullfile( data_root, 'iti_gaze_aligned_coh' );
 coh_mats = shared_utils.io.findmat( coh_p );
 
 norm_each = { 'channel', 'regions', 'trialtypes', 'administration', 'looks_to' };
 norm_across = { 'magnitudes', 'contexts', 'sessions', 'blocks', 'trials' };
+tform_coh = @(coh, labels, f, t) transform_per_trial_coh_do_norm_contrast(coh, labels, f, t, norm_each, norm_across, false);
+
 [coh, coh_labels, f, t] = bfw.load_time_frequency_measure( coh_mats ...
   , 'load_func', @shared_utils.io.fload ...
   , 'get_data_func', @(x) x.data ...
   , 'get_labels_func', @(x) x.labels ...
   , 'get_time_func', @(x) x.t ...
   , 'get_freqs_func', @(x) x.f ...
-  , 'transform_func', @(coh, labels, f, t) transform_per_trial_coh_do_norm_contrast(coh, labels, f, t, norm_each, norm_across) ...
+  , 'transform_func',  tform_coh ...
 );
 
 %%
@@ -252,9 +254,59 @@ plt_data = nanmean( plt_data(:, t_ind), 2 );
 rs_each = { 'regions', 'looks_to', 'bands' };
 
 anova_outs = dsp3.anova1( plt_data, plt_labs', rs_each, 'outcomes', 'mask', plt_mask );
+ttest_outs = dsp3.ttest2( plt_data, plt_labs', rs_each, 'self-none', 'other-none', 'mask', plt_mask, 'descriptive_funcs', dsp3.nandescriptive_funcs );
 
 sn_rs_outs = dsp3.ranksum( plt_data, plt_labs', rs_each, 'self', 'none', 'mask', plt_mask );
 on_rs_outs = dsp3.ranksum( plt_data, plt_labs', rs_each, 'other', 'none', 'mask', plt_mask );
+
+%%  
+
+f_ind = f >= 10 & f <= 60;
+
+over_freq_coh = nanmean( coh(:, f_ind, t >= 0.05 & t <= 0.35), 3 );
+plt_labs = coh_labels';
+
+plt_mask = pipe( rowmask(plt_labs) ...
+  , @(m) find(plt_labs, {'acc_bla', 'pre', 'choice'}, m) ...
+  , @(m) find(plt_labs, {'monkey'}, m) ...
+);
+
+pl = plotlabeled.make_common();
+pl.add_smoothing = true;
+pl.smooth_func = @(x) smoothdata(x, 'smoothingfactor', 0.1);
+pl.one_legend = false;
+
+pl.x = f(f_ind);
+
+[axs, hs, inds] = pl.lines( over_freq_coh(plt_mask, :), prune(plt_labs(plt_mask)) ...
+  , 'outcomes', {'regions', 'looks_to', 'trialtypes', 'administration'} );
+
+xlabel( axs(1), 'Frequency (Hz)' );
+shared_utils.plot.set_ylims( axs, [-1.5e-2, 1.5e-2] );
+
+bi = shared_utils.vector.slidebin( 1:size(over_freq_coh, 2), 3, 3, true );
+is_sig = false( 1, size(over_freq_coh, 2) );
+
+for i = 1:numel(bi)
+  freq_coh = nanmean( over_freq_coh(plt_mask, bi{i}), 2 );  
+  outs = dsp3.anova1( freq_coh, prune(plt_labs(plt_mask)), {}, 'outcomes' );
+  is_sig(i) = outs.anova_tables{1}.Prob_F{1} < 0.05;
+end
+
+% is_sig = false( 1, size(over_freq_coh, 2) );
+% for i = 1:size(over_freq_coh, 2)  
+%   outs = dsp3.anova1( over_freq_coh(plt_mask, i), prune(plt_labs(plt_mask)), {}, 'outcomes' );
+%   is_sig(i) = outs.anova_tables{1}.Prob_F{1} < 0.05;
+% end
+
+if ( sum(is_sig) > 0 )
+  for i = 1:numel(axs)
+    hold( axs(i), 'on' );
+    x = f(f_ind);
+    x = x(is_sig); 
+    plot( axs(i), x, max(get(axs(i), 'ylim')) - diff(get(axs(i), 'ylim')) * 0.25, 'k*' );
+  end
+end
 
 %%
 
@@ -290,6 +342,8 @@ pl.x = t(t_ind);
 
 [axs, hs, inds] = pl.lines( plt_data, plt_labs, 'outcomes' ...
   , {'regions', 'bands', 'looks_to', 'trialtypes', 'administration'} );
+
+% shared_utils.plot.set_ylims( axs, [-1.5e-2, 1.5e-2] );
 
 % dsp3.compare_series( axs, inds, plt_data, @ranksum ...
 %   , 'x', t(t_ind), 'series_handles', hs, 'fig', gcf );
